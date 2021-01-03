@@ -3,6 +3,7 @@
 
 import numpy as np
 
+# SUDOKU_SIZE should always be a square number
 SUDOKU_SIZE = 9
 
 
@@ -15,22 +16,27 @@ def check_grid_validity(puzzle: list) -> None:
 
     >>> check_grid_validity([])
     Traceback (most recent call last):
-    AssertionError
+    AssertionError: The sudoku doesn't have the right height
 
-    >>> check_grid_validity([[]] * 9)
+    >>> check_grid_validity([[]] * SUDOKU_SIZE)
     Traceback (most recent call last):
-    AssertionError
+    AssertionError: The sudoku doesn't have the right width
 
     >>> grid = [[-1 for j in range(SUDOKU_SIZE)] for i in range(SUDOKU_SIZE)]
     >>> check_grid_validity(grid)
     Traceback (most recent call last):
-    AssertionError
+    AssertionError: Some cell have numbers that are out of range
+
+    >>> grid = [[1 for j in range(SUDOKU_SIZE)] for i in range(SUDOKU_SIZE)]
+    >>> check_grid_validity(grid)
     """
-    assert len(puzzle) == SUDOKU_SIZE
+    assert len(puzzle) == SUDOKU_SIZE, "The sudoku doesn't have the right height"
     for row in puzzle:
-        assert len(row) == SUDOKU_SIZE
+        assert len(row) == SUDOKU_SIZE, "The sudoku doesn't have the right width"
         for cell in row:
-            assert cell >= 0 and cell <= SUDOKU_SIZE
+            assert (
+                cell >= 0 and cell <= SUDOKU_SIZE
+            ), "Some cell have numbers that are out of range"
 
 
 def get_row_column_square(puzzle: np.ndarray, x: int, y: int) -> tuple:
@@ -90,7 +96,7 @@ def get_cell_candidates(puzzle: np.ndarray, x: int, y: int) -> set:
 
     Returns the bit representation of the possible candidates
     """
-    candidates = {i + 1 for i in range(SUDOKU_SIZE)}
+    candidates = {*range(1, SUDOKU_SIZE + 1)}
 
     row, column, square = get_row_column_square(puzzle, x, y)
     candidates.difference_update(row)
@@ -121,24 +127,14 @@ def get_cell_least_candidates(cell_candidates: np.ndarray) -> tuple:
     return coords
 
 
-def remove_candidate(cells, candidate) -> bool:
-    """
-    Remove the candidate from the cells
-    Returns True if there is no choice and it needs to backtrack
-    """
+def remove_candidate(cells: np.ndarray, candidate: int) -> None:
+    """Remove the candidate from the cells"""
     for i in range(len(cells)):
         if cells[i] == -1:
             continue
 
-        # ! 0b111111111 only works for SUDOKU_SIZE = 9
         mask = (1 << SUDOKU_SIZE) - 1
         cells[i] &= mask ^ (1 << (candidate - 1))
-
-        # If a cell has zero choices, backtrack
-        if cells[i] == 0:
-            return True
-
-    return False
 
 
 def solve(puzzle: np.ndarray, cell_candidates: np.ndarray) -> np.ndarray:
@@ -164,25 +160,25 @@ def solve(puzzle: np.ndarray, cell_candidates: np.ndarray) -> np.ndarray:
     cell_candidates[y][x] = -1
 
     print(puzzle)
+    print(cell_candidates)
+    print((y, x))
 
     for candidate in candidates:
         # Fill the cell with a candidate
         puzzle[y][x] = candidate
+        print((y, x), candidate)
 
         # Remove this candidate from cells on the same row, column or square
-        backtrack_row = remove_candidate(row, candidate)
-        backtrack_column = remove_candidate(column, candidate)
-        backtrack_square = remove_candidate(square, candidate)
+        remove_candidate(row, candidate)
+        remove_candidate(column, candidate)
+        remove_candidate(square, candidate)
         # pretty_print(cell_candidates)
-        print((y, x), candidate, backtrack_row, backtrack_column, backtrack_square)
 
-        # if it needs to backtrack, change the candidate
-        if not (backtrack_row or backtrack_column or backtrack_square):
-            # Redo the same steps with the new puzzle
-            solution = solve(puzzle, cell_candidates)
+        # Redo the same steps with the new puzzle
+        solution = solve(puzzle, cell_candidates)
 
-            if solution is not None:
-                return solution
+        if solution is not None:
+            return solution
 
         # Restore the original neighbors candidates
         row = original_row[:]
@@ -193,6 +189,8 @@ def solve(puzzle: np.ndarray, cell_candidates: np.ndarray) -> np.ndarray:
     # ? I don't think that I need to reset puzzle, but just in case
     puzzle[y][x] = 0
     cell_candidates[y][x] = original_cell_candidates
+
+    print("backtrack")
 
 
 def sudoku_solver(puzzle: list) -> list:
