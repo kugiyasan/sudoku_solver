@@ -6,39 +6,46 @@ import numpy as np
 # SUDOKU_SIZE should always be a square number
 SUDOKU_SIZE = 9
 
+first_solution = None
 
-def check_grid_validity(puzzle: list) -> None:
+
+def check_grid_validity(puzzle: np.ndarray) -> None:
     """
     Raise an error if the given puzzle isn't the right size
     or has number that aren't possible
 
-    This function doesn't check if the sudoku has no or multiple solutions
-    ? It might be better to use `raise` instead of `assert`
-    ? `assert` will be ignored if the -O flag is passed
-
-    >>> check_grid_validity([])
+    >>> check_grid_validity(np.array([]))
     Traceback (most recent call last):
-    AssertionError: The sudoku doesn't have the right height
+    Exception: The sudoku doesn't have the right shape
 
-    >>> check_grid_validity([[]] * SUDOKU_SIZE)
+    >>> check_grid_validity(np.full(SUDOKU_SIZE, 1))
     Traceback (most recent call last):
-    AssertionError: The sudoku doesn't have the right width
+    Exception: The sudoku doesn't have the right shape
 
-    >>> grid = [[-1 for j in range(SUDOKU_SIZE)] for i in range(SUDOKU_SIZE)]
+    >>> grid = np.full((SUDOKU_SIZE, SUDOKU_SIZE), 0)
+    >>> grid[0, 0] = -1
     >>> check_grid_validity(grid)
     Traceback (most recent call last):
-    AssertionError: Some cell have numbers that are out of range
-
-    >>> grid = [[1 for j in range(SUDOKU_SIZE)] for i in range(SUDOKU_SIZE)]
-    >>> check_grid_validity(grid)
+    Exception: Some cell have numbers that are out of range
     """
-    assert len(puzzle) == SUDOKU_SIZE, "The sudoku doesn't have the right height"
-    for row in puzzle:
-        assert len(row) == SUDOKU_SIZE, "The sudoku doesn't have the right width"
+    # ! Raise Exception that are more appropriate
+    if puzzle.shape != (SUDOKU_SIZE, SUDOKU_SIZE):
+        raise Exception("The sudoku doesn't have the right shape")
+
+    for i in range(len(puzzle)):
+        row = puzzle[i]
+        if len(set(row)) + (row == 0).sum() != SUDOKU_SIZE + 1:
+            raise Exception("The same number appears twice in a row")
+
+        column = puzzle[:, i]
+        if len(set(column)) + (column == 0).sum() != SUDOKU_SIZE + 1:
+            raise Exception("The same number appears twice in a column")
+
+        # ! Check for the same number in the same square
+
         for cell in row:
-            assert (
-                cell >= 0 and cell <= SUDOKU_SIZE
-            ), "Some cell have numbers that are out of range"
+            if cell < 0 or cell > SUDOKU_SIZE:
+                raise Exception("Some cell have numbers that are out of range")
 
 
 def get_row_column_square(puzzle: np.ndarray, x: int, y: int) -> tuple:
@@ -48,8 +55,7 @@ def get_row_column_square(puzzle: np.ndarray, x: int, y: int) -> tuple:
     sq_y = y // sqrt * sqrt
     sq_x = x // sqrt * sqrt
 
-    # TODO remove the of the square cells, they are copies of cells
-    # TODO that are already in row or column
+    # TODO Remove duplicate cells, keeping them is useless
     square = puzzle[sq_y : sq_y + sqrt, sq_x : sq_x + sqrt]
     return puzzle[y], puzzle[:, x], square.flat
 
@@ -90,6 +96,43 @@ def bits_to_candidates(bits: int) -> set:
             candidates.add(i + 1)
 
     return candidates
+
+
+def contains_zero(array: np.ndarray) -> bool:
+    """
+    Returns if the 2d array contains zeroes
+    If it's not an array, return True
+
+    >>> contains_zero(None)
+    True
+
+    >>> grid = np.full((SUDOKU_SIZE, SUDOKU_SIZE), 0)
+    >>> contains_zero(grid)
+    True
+
+    >>> grid = np.full((SUDOKU_SIZE, SUDOKU_SIZE), 1)
+    >>> contains_zero(grid)
+    False
+    """
+    if array is None:
+        return True
+
+    for row in array:
+        for cell in row:
+            if cell == 0:
+                return True
+
+    return False
+
+
+def deep_copy(array: np.ndarray) -> np.ndarray:
+    """Returns a deep copy of an numpy ndarray"""
+    result = np.ndarray(array.shape, dtype=array.dtype)
+    for y in range(len(array)):
+        for x in range(len(array[y])):
+            result[y][x] = array[y][x]
+
+    return result
 
 
 def get_cell_candidates(puzzle: np.ndarray, x: int, y: int) -> set:
@@ -150,7 +193,7 @@ def _remove_candidate(cells: np.ndarray, candidate: int) -> None:
         cells[i] &= mask ^ bit
 
 
-def generate_cell_candidates(puzzle: np.ndarray):
+def create_cell_candidates(puzzle: np.ndarray) -> np.ndarray:
     cell_candidates = np.full((SUDOKU_SIZE, SUDOKU_SIZE), -1)
 
     for y in range(len(puzzle)):
@@ -164,6 +207,9 @@ def generate_cell_candidates(puzzle: np.ndarray):
 
 class SolveEngine:
     def __init__(self, cell_candidates: np.ndarray, x: int, y: int) -> None:
+        """
+        A class that helps to save and restore the state of row, column and square
+        """
         self.x = x
         self.y = y
         self.cell_candidates = cell_candidates
@@ -171,6 +217,7 @@ class SolveEngine:
         self.copy()
 
     def copy(self) -> None:
+        """Make a copy of the row, column and square"""
         x = self.x
         y = self.y
         rcs = get_row_column_square(self.cell_candidates, x, y)
@@ -183,6 +230,7 @@ class SolveEngine:
         self.original_cell_candidates = self.cell_candidates[y][x]
 
     def restore(self) -> None:
+        """Restore the row, column and square that was previously saved"""
         self.cell_candidates[self.y] = self.original_row
         self.cell_candidates[:, self.x] = self.original_column
 
@@ -204,8 +252,13 @@ def solve(puzzle: np.ndarray, cell_candidates: np.ndarray) -> np.ndarray:
     # Find the cell with the smallest amount of candidates
     x, y = get_cell_least_candidates(cell_candidates)
 
-    # if every cell has the default value, it means that the puzzle is done
+    # If every cell has the default value, it means that the puzzle is done
     if cell_candidates[y][x] == -1:
+        # If it's the first solution, store it and continue
+        global first_solution
+        if first_solution is None:
+            first_solution = deep_copy(puzzle)
+            return
         return puzzle
 
     # Copy the current row, column and square
@@ -231,7 +284,7 @@ def solve(puzzle: np.ndarray, cell_candidates: np.ndarray) -> np.ndarray:
         # Restore the original neighbors candidates
         solve_engine.restore()
 
-    # Every candidate failed, it's time to backtrack
+    # Every candidate failed, we need to do backtracking
     # ? I don't need to reset puzzle, but it makes things clearer
     puzzle[y][x] = 0
     cell_candidates[y][x] = solve_engine.original_cell_candidates
@@ -239,22 +292,24 @@ def solve(puzzle: np.ndarray, cell_candidates: np.ndarray) -> np.ndarray:
 
 def sudoku_solver(puzzle: list) -> list:
     """Entry point for the Sudoku solver"""
+    global first_solution
+    first_solution = None
     puzzle = np.array(puzzle)
     check_grid_validity(puzzle)
 
     # Compute the candidates for each cell
     # Candidates will be stored
     # as a number from 0 to 2^SUDOKU_SIZE-1 (-1 is used for filled cells)
-    cell_candidates = generate_cell_candidates(puzzle)
+    cell_candidates = create_cell_candidates(puzzle)
 
     # Solve recursively the puzzle
-    solution = solve(puzzle, cell_candidates)
+    second_solution = solve(puzzle, cell_candidates)
 
-    if solution is None:
+    if first_solution is None:
         raise ValueError("No solution for this sudoku")
-
-    # TODO check for multiple solutions
-    return solution.tolist()
+    if not contains_zero(second_solution):
+        raise ValueError("Multiple solutions for this sudoku")
+    return first_solution.tolist()
 
 
 def pretty_print(array: np.ndarray) -> None:
@@ -300,4 +355,11 @@ if __name__ == "__main__":
         [1, 7, 3, 8, 6, 2, 5, 9, 4],
     ]
 
-    print(sudoku_solver(puzzle))
+    # print(sudoku_solver(puzzle))
+
+    def stmt():
+        sudoku_solver(puzzle)
+
+    import timeit
+    times = timeit.repeat(stmt, number=10)
+    print(times)
