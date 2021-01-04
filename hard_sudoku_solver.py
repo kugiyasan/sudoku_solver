@@ -127,11 +127,14 @@ def get_cell_least_candidates(cell_candidates: np.ndarray) -> tuple:
                 smallest_len = candidates_len
                 coords = (x, y)
 
+                if smallest_len == 1:
+                    return coords
+
     return coords
 
 
 def _remove_candidate(cells: np.ndarray, candidate: int) -> None:
-    """Remove the candidate from the cells"""
+    """Remove the candidate from the cells in place"""
     for i in range(len(cells)):
         if cells[i] == -1:
             continue
@@ -147,8 +150,20 @@ def _remove_candidate(cells: np.ndarray, candidate: int) -> None:
         cells[i] &= mask ^ bit
 
 
+def generate_cell_candidates(puzzle: np.ndarray):
+    cell_candidates = np.full((SUDOKU_SIZE, SUDOKU_SIZE), -1)
+
+    for y in range(len(puzzle)):
+        for x in range(len(puzzle[y])):
+            if puzzle[y][x] == 0:
+                bits = candidates_to_bits(get_cell_candidates(puzzle, x, y))
+                cell_candidates[y][x] = bits
+
+    return cell_candidates
+
+
 class SolveEngine:
-    def __init__(self, cell_candidates, x, y):
+    def __init__(self, cell_candidates: np.ndarray, x: int, y: int) -> None:
         self.x = x
         self.y = y
         self.cell_candidates = cell_candidates
@@ -161,24 +176,27 @@ class SolveEngine:
         rcs = get_row_column_square(self.cell_candidates, x, y)
         self.row, self.column, self.square = rcs
 
-        self.original_row = self.row[:]
-        self.original_column = self.column[:]
-        self.original_square = self.square[:]
+        self.original_row = np.copy(self.row)
+        self.original_column = np.copy(self.column)
+        self.original_square = np.copy(self.square)
 
         self.original_cell_candidates = self.cell_candidates[y][x]
 
     def restore(self) -> None:
-        self.row = self.original_row[:]
-        self.column = self.original_column[:]
-        self.square = self.original_square[:]
+        self.cell_candidates[self.y] = self.original_row
+        self.cell_candidates[:, self.x] = self.original_column
+
+        sqrt = int(SUDOKU_SIZE ** 0.5)
+        sq_y = self.y // sqrt * sqrt
+        sq_x = self.x // sqrt * sqrt
+
+        squareArray = self.cell_candidates[sq_y : sq_y + sqrt, sq_x : sq_x + sqrt]
+        squareArray.flat = self.original_square
 
     def remove_candidate(self, candidate: int) -> None:
         _remove_candidate(self.row, candidate)
         _remove_candidate(self.column, candidate)
         _remove_candidate(self.square, candidate)
-
-
-depth = []
 
 
 def solve(puzzle: np.ndarray, cell_candidates: np.ndarray) -> np.ndarray:
@@ -188,7 +206,6 @@ def solve(puzzle: np.ndarray, cell_candidates: np.ndarray) -> np.ndarray:
 
     # if every cell has the default value, it means that the puzzle is done
     if cell_candidates[y][x] == -1:
-        print("PUZZLE IS DONE")
         return puzzle
 
     # Copy the current row, column and square
@@ -196,16 +213,11 @@ def solve(puzzle: np.ndarray, cell_candidates: np.ndarray) -> np.ndarray:
 
     # Mark the cell as filled by putting the default value
     candidates = bits_to_candidates(cell_candidates[y][x])
-    depth.append((y, x))
-    print(depth, "solve")
-    if len(candidates) != 1:
-        print(puzzle)
-        print(cell_candidates)
-    cell_candidates[y][x] = -1
 
     for candidate in candidates:
         # Fill the cell with a candidate
         puzzle[y][x] = candidate
+        cell_candidates[y][x] = -1
 
         # Remove this candidate from cells on the same row, column or square
         solve_engine.remove_candidate(candidate)
@@ -220,14 +232,9 @@ def solve(puzzle: np.ndarray, cell_candidates: np.ndarray) -> np.ndarray:
         solve_engine.restore()
 
     # Every candidate failed, it's time to backtrack
-    # ? I don't think that I need to reset puzzle, but just in case
-    # ! Chances are high that the backtrack is not working
-    # ! since the 4x4 grid was easily done
+    # ? I don't need to reset puzzle, but it makes things clearer
     puzzle[y][x] = 0
     cell_candidates[y][x] = solve_engine.original_cell_candidates
-
-    depth.pop()
-    print((y, x), "backtrack")
 
 
 def sudoku_solver(puzzle: list) -> list:
@@ -238,13 +245,7 @@ def sudoku_solver(puzzle: list) -> list:
     # Compute the candidates for each cell
     # Candidates will be stored
     # as a number from 0 to 2^SUDOKU_SIZE-1 (-1 is used for filled cells)
-    cell_candidates = np.full((SUDOKU_SIZE, SUDOKU_SIZE), -1)
-
-    for y in range(len(puzzle)):
-        for x in range(len(puzzle[y])):
-            if puzzle[y][x] == 0:
-                bits = candidates_to_bits(get_cell_candidates(puzzle, x, y))
-                cell_candidates[y][x] = bits
+    cell_candidates = generate_cell_candidates(puzzle)
 
     # Solve recursively the puzzle
     solution = solve(puzzle, cell_candidates)
@@ -253,7 +254,7 @@ def sudoku_solver(puzzle: list) -> list:
         raise ValueError("No solution for this sudoku")
 
     # TODO check for multiple solutions
-    return solution
+    return solution.tolist()
 
 
 def pretty_print(array: np.ndarray) -> None:
@@ -267,7 +268,7 @@ def pretty_print(array: np.ndarray) -> None:
             return "_" * SUDOKU_SIZE
         return bin(item)[2:].zfill(SUDOKU_SIZE)
 
-    print(*[list(lst) for lst in np.vectorize(to_bit)(array)], sep="\n", end="\n\n")
+    print(*[" ".join(lst) for lst in np.vectorize(to_bit)(array)], sep="\n", end="\n\n")
 
 
 if __name__ == "__main__":
