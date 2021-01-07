@@ -1,27 +1,18 @@
+import math
 import numpy as np
-
-# SUDOKU_SIZE should always be a square number
-SUDOKU_SIZE = 9
+from typing import Set, Tuple
 
 
-def set_sudoku_size(size: int):
-    global SUDOKU_SIZE
-    SUDOKU_SIZE = size
-
-    # Check to make sure that SUDOKU_SIZE is a square number
-    sqrt = int(SUDOKU_SIZE ** 0.5)
-    if sqrt * sqrt != SUDOKU_SIZE:
-        raise ValueError("SUDOKU_SIZE should be a square number")
-
-
-def get_row_column_square(puzzle: np.ndarray, x: int, y: int) -> tuple:
+def get_row_column_square(
+    puzzle: np.ndarray, x: int, y: int
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """utility function, returns the row, column and square of the puzzle"""
-    # TODO write a implementation for puzzle: list[list]
-    sqrt = int(SUDOKU_SIZE ** 0.5)
+    sqrt = int(puzzle.shape[0] ** 0.5)
     sq_y = y // sqrt * sqrt
     sq_x = x // sqrt * sqrt
 
-    # TODO Remove duplicate cells, keeping them is useless
+    # ? Should remove duplicate cells, keeping them is useless
+    # ? Although I don't think it would improve significantly the performance
     square = puzzle[sq_y : sq_y + sqrt, sq_x : sq_x + sqrt]
     return puzzle[y], puzzle[:, x], square.flat
 
@@ -35,16 +26,21 @@ def check_grid_validity(puzzle: np.ndarray) -> None:
     Traceback (most recent call last):
     Exception: The sudoku doesn't have the right shape
 
-    >>> check_grid_validity(np.full(SUDOKU_SIZE, 1))
+    >>> check_grid_validity(np.full(9, 1))
     Traceback (most recent call last):
     Exception: The sudoku doesn't have the right shape
 
-    >>> grid = np.full((SUDOKU_SIZE, SUDOKU_SIZE), 0)
+    >>> grid = np.full((9, 9), 0)
     >>> grid[0, 0] = -1
     >>> check_grid_validity(grid)
     Traceback (most recent call last):
     Exception: Some cell have numbers that are out of range
     """
+    SUDOKU_SIZE = puzzle.shape[0]
+    # Check to make sure that SUDOKU_SIZE is a square number
+    if SUDOKU_SIZE != math.isqrt(SUDOKU_SIZE) ** 2:
+        raise ValueError("SUDOKU_SIZE should be a square number")
+
     # ! Raise Exception that are more appropriate
     if puzzle.shape != (SUDOKU_SIZE, SUDOKU_SIZE):
         raise Exception("The sudoku doesn't have the right shape")
@@ -52,11 +48,11 @@ def check_grid_validity(puzzle: np.ndarray) -> None:
     for i in range(len(puzzle)):
         row = puzzle[i]
         if len(set(row)) + (row == 0).sum() != SUDOKU_SIZE + 1:
-            raise Exception("The same number appears twice in a row")
+            raise Exception(f"The same number appears twice in row {i}")
 
         column = puzzle[:, i]
         if len(set(column)) + (column == 0).sum() != SUDOKU_SIZE + 1:
-            raise Exception("The same number appears twice in a column")
+            raise Exception(f"The same number appears twice in column {i}")
 
         # ! Check for the same number in the same square
 
@@ -65,7 +61,7 @@ def check_grid_validity(puzzle: np.ndarray) -> None:
                 raise Exception("Some cell have numbers that are out of range")
 
 
-def candidates_to_bits(candidates: set) -> int:
+def candidates_to_bits(candidates: Set[int]) -> int:
     """
     Convert a candidates set into its bits representation
     The bits are in big endian order
@@ -77,14 +73,13 @@ def candidates_to_bits(candidates: set) -> int:
     '0b100100000'
     """
     bits = 0
-    for i in range(SUDOKU_SIZE):
-        if i + 1 in candidates:
-            bits ^= 1 << i
+    for candidate in candidates:
+        bits ^= 1 << (candidate - 1)
 
     return bits
 
 
-def bits_to_candidates(bits: int) -> set:
+def bits_to_candidates(bits: int) -> Set[int]:
     """
     Convert a bits representation into a set of candidates
 
@@ -95,59 +90,26 @@ def bits_to_candidates(bits: int) -> set:
     {1, 3, 7, 8, 9}
     """
     candidates = set()
-    for i in range(SUDOKU_SIZE):
-        bit = bits & (1 << i)
+    i = 1
+    while bits:
+        bit = bits & 1
         if bit:
-            candidates.add(i + 1)
+            candidates.add(i)
+
+        bits >>= 1
+        i += 1
 
     return candidates
 
 
-def contains_zero(array: np.ndarray) -> bool:
-    """
-    Returns if the 2d array contains zeroes
-    If it's not an array, return True
-
-    >>> contains_zero(None)
-    True
-
-    >>> grid = np.full((SUDOKU_SIZE, SUDOKU_SIZE), 0)
-    >>> contains_zero(grid)
-    True
-
-    >>> grid = np.full((SUDOKU_SIZE, SUDOKU_SIZE), 1)
-    >>> contains_zero(grid)
-    False
-    """
-    if array is None:
-        return True
-
-    for row in array:
-        for cell in row:
-            if cell == 0:
-                return True
-
-    return False
-
-
-def deep_copy(array: np.ndarray) -> np.ndarray:
-    """Returns a deep copy of an numpy ndarray"""
-    result = np.ndarray(array.shape, dtype=array.dtype)
-    for y in range(len(array)):
-        for x in range(len(array[y])):
-            result[y][x] = array[y][x]
-
-    return result
-
-
-def get_cell_candidates(puzzle: np.ndarray, x: int, y: int) -> set:
+def get_cell_candidates(puzzle: np.ndarray, x: int, y: int) -> Set[int]:
     """
     Discard the numbers
     that are on the same speficied line, column or square
 
     Returns the bit representation of the possible candidates
     """
-    candidates = {*range(1, SUDOKU_SIZE + 1)}
+    candidates = {*range(1, puzzle.shape[0] + 1)}
 
     row, column, square = get_row_column_square(puzzle, x, y)
     candidates.difference_update(row)
@@ -159,6 +121,12 @@ def get_cell_candidates(puzzle: np.ndarray, x: int, y: int) -> set:
 
 
 def create_cell_candidates(puzzle: np.ndarray) -> np.ndarray:
+    """
+    Compute the candidates for each cell
+    Candidates will be stored
+    as a number from 0 to 2^SUDOKU_SIZE-1 (-1 is used for filled cells)
+    """
+    SUDOKU_SIZE = puzzle.shape[0]
     cell_candidates = np.full((SUDOKU_SIZE, SUDOKU_SIZE), -1)
 
     for y in range(len(puzzle)):
@@ -168,17 +136,3 @@ def create_cell_candidates(puzzle: np.ndarray) -> np.ndarray:
                 cell_candidates[y][x] = bits
 
     return cell_candidates
-
-
-def pretty_print(array: np.ndarray) -> None:
-    """
-    Utility function
-    Use it to print the cell_candidates in a binary form
-    """
-
-    def to_bit(item):
-        if item == -1:
-            return "_" * SUDOKU_SIZE
-        return bin(item)[2:].zfill(SUDOKU_SIZE)
-
-    print(*[" ".join(lst) for lst in np.vectorize(to_bit)(array)], sep="\n", end="\n\n")

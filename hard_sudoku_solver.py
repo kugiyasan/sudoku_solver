@@ -2,26 +2,20 @@
 # python3 -m pytest --doctest-modules
 
 import numpy as np
+from typing import Generator, List, Sequence, Tuple, Union
 from utils import (
     bits_to_candidates,
     check_grid_validity,
-    contains_zero,
     create_cell_candidates,
-    deep_copy,
     get_row_column_square,
-    SUDOKU_SIZE,
-    set_sudoku_size,
 )
 
 
-first_solution = None
-
-
-def get_cell_least_candidates(cell_candidates: np.ndarray) -> tuple:
+def get_cell_least_candidates(cell_candidates: np.ndarray) -> Tuple[int, int]:
     """
     Returns the coords of the first cell with the smallest amount of candidates
     """
-    smallest_len = SUDOKU_SIZE
+    smallest_len = cell_candidates.shape[0]
     coords = (0, 0)
 
     for y in range(len(cell_candidates)):
@@ -40,7 +34,11 @@ def get_cell_least_candidates(cell_candidates: np.ndarray) -> tuple:
     return coords
 
 
-def _remove_candidate(cells: np.ndarray, candidate: int) -> None:
+def _remove_candidate(
+    cells: np.ndarray,
+    candidate: int,
+    SUDOKU_SIZE: int,
+) -> None:
     """Remove the candidate from the cells in place"""
     for i in range(len(cells)):
         if cells[i] == -1:
@@ -66,6 +64,9 @@ class SolveEngine:
         self.y = y
         self.cell_candidates = cell_candidates
 
+        self.SUDOKU_SIZE = cell_candidates.shape[0]
+        self.sqrt = int(self.SUDOKU_SIZE ** 0.5)
+
         self.copy()
 
     def copy(self) -> None:
@@ -86,7 +87,7 @@ class SolveEngine:
         self.cell_candidates[self.y] = self.original_row
         self.cell_candidates[:, self.x] = self.original_column
 
-        sqrt = int(SUDOKU_SIZE ** 0.5)
+        sqrt = self.sqrt
         sq_y = self.y // sqrt * sqrt
         sq_x = self.x // sqrt * sqrt
 
@@ -94,29 +95,27 @@ class SolveEngine:
         squareArray.flat = self.original_square
 
     def remove_candidate(self, candidate: int) -> None:
-        _remove_candidate(self.row, candidate)
-        _remove_candidate(self.column, candidate)
-        _remove_candidate(self.square, candidate)
+        _remove_candidate(self.row, candidate, self.SUDOKU_SIZE)
+        _remove_candidate(self.column, candidate, self.SUDOKU_SIZE)
+        _remove_candidate(self.square, candidate, self.SUDOKU_SIZE)
 
 
-def solve(puzzle: np.ndarray, cell_candidates: np.ndarray) -> np.ndarray:
+def recursive_solve(
+    puzzle: np.ndarray,
+    cell_candidates: np.ndarray,
+) -> Generator[np.ndarray, None, None]:
     """This is the recursive function to solve the sudoku"""
     # Find the cell with the smallest amount of candidates
     x, y = get_cell_least_candidates(cell_candidates)
 
     # If every cell has the default value, it means that the puzzle is done
     if cell_candidates[y][x] == -1:
-        # If it's the first solution, store it and continue
-        global first_solution
-        if first_solution is None:
-            first_solution = deep_copy(puzzle)
-            return
-        return puzzle
+        yield puzzle
+        return
 
     # Copy the current row, column and square
     solve_engine = SolveEngine(cell_candidates, x, y)
 
-    # Mark the cell as filled by putting the default value
     candidates = bits_to_candidates(cell_candidates[y][x])
 
     for candidate in candidates:
@@ -128,10 +127,7 @@ def solve(puzzle: np.ndarray, cell_candidates: np.ndarray) -> np.ndarray:
         solve_engine.remove_candidate(candidate)
 
         # Redo the same steps with the new puzzle
-        solution = solve(puzzle, cell_candidates)
-
-        if solution is not None:
-            return solution
+        yield from recursive_solve(puzzle, cell_candidates)
 
         # Restore the original neighbors candidates
         solve_engine.restore()
@@ -142,62 +138,35 @@ def solve(puzzle: np.ndarray, cell_candidates: np.ndarray) -> np.ndarray:
     cell_candidates[y][x] = solve_engine.original_cell_candidates
 
 
-def sudoku_solver(puzzle: list) -> list:
-    """Entry point for the Sudoku solver"""
-    set_sudoku_size(len(puzzle))
+def sudoku_solver(puzzle: List[List[int]]) -> Sequence[int]:
+    """Entry point for Codewars kata"""
+    solution_generator = generate_solutions(puzzle)
 
-    puzzle = np.array(puzzle)
-    check_grid_validity(puzzle)
-
-    global first_solution
-    first_solution = None
-
-    # Compute the candidates for each cell
-    # Candidates will be stored
-    # as a number from 0 to 2^SUDOKU_SIZE-1 (-1 is used for filled cells)
-    cell_candidates = create_cell_candidates(puzzle)
-
-    # Solve recursively the puzzle
-    second_solution = solve(puzzle, cell_candidates)
-
+    first_solution = next(solution_generator)
     if first_solution is None:
-        raise ValueError("No solution for this sudoku")
-    if not contains_zero(second_solution):
-        raise ValueError("Multiple solutions for this sudoku")
+        raise SolveError("No solution for this sudoku")
+
+    # Raise an error if there is a second solution
+    try:
+        next(solution_generator)
+        raise SolveError("Multiple solutions for this sudoku")
+    except StopIteration:
+        pass
+
     return first_solution.tolist()
 
 
-if __name__ == "__main__":
-    puzzle = [
-        [0, 0, 6, 1, 0, 0, 0, 0, 8],
-        [0, 8, 0, 0, 9, 0, 0, 3, 0],
-        [2, 0, 0, 0, 0, 5, 4, 0, 0],
-        [4, 0, 0, 0, 0, 1, 8, 0, 0],
-        [0, 3, 0, 0, 7, 0, 0, 4, 0],
-        [0, 0, 7, 9, 0, 0, 0, 0, 3],
-        [0, 0, 8, 4, 0, 0, 0, 0, 6],
-        [0, 2, 0, 0, 5, 0, 0, 8, 0],
-        [1, 0, 0, 0, 0, 2, 5, 0, 0],
-    ]
+def generate_solutions(
+    original_puzzle: List[List[int]],
+) -> Generator[np.ndarray, None, None]:
+    puzzle = np.array(original_puzzle)
+    check_grid_validity(puzzle)
 
-    solution = [
-        [3, 4, 6, 1, 2, 7, 9, 5, 8],
-        [7, 8, 5, 6, 9, 4, 1, 3, 2],
-        [2, 1, 9, 3, 8, 5, 4, 6, 7],
-        [4, 6, 2, 5, 3, 1, 8, 7, 9],
-        [9, 3, 1, 2, 7, 8, 6, 4, 5],
-        [8, 5, 7, 9, 4, 6, 2, 1, 3],
-        [5, 9, 8, 4, 1, 3, 7, 2, 6],
-        [6, 2, 4, 7, 5, 9, 3, 8, 1],
-        [1, 7, 3, 8, 6, 2, 5, 9, 4],
-    ]
+    cell_candidates = create_cell_candidates(puzzle)
 
-    # print(sudoku_solver(puzzle))
+    # Solve recursively the puzzle
+    return recursive_solve(puzzle, cell_candidates)
 
-    def stmt():
-        sudoku_solver(puzzle)
 
-    import timeit
-
-    times = timeit.repeat(stmt, number=10)
-    print(times)
+class SolveError(Exception):
+    pass
