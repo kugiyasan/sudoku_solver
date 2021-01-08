@@ -1,12 +1,21 @@
 import math
 import numpy as np
-from typing import Set, Tuple
+from typing import Iterable, Set, Tuple
 
 
 def get_row_column_square(
     puzzle: np.ndarray, x: int, y: int
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """utility function, returns the row, column and square of the puzzle"""
+) -> Tuple[np.ndarray, np.ndarray, Iterable[int]]:
+    """
+    utility function, returns the row, column and square of the puzzle
+
+    >>> puzzle = np.arange(81).reshape((9, 9))
+    >>> rcs = get_row_column_square(puzzle, 0, 0)
+    >>> rcs[0]
+    array([0, 1, 2, 3, 4, 5, 6, 7, 8])
+    >>> rcs[1]
+    array([ 0,  9, 18, 27, 36, 45, 54, 63, 72])
+    """
     sqrt = int(puzzle.shape[0] ** 0.5)
     sq_y = y // sqrt * sqrt
     sq_x = x // sqrt * sqrt
@@ -24,41 +33,40 @@ def check_grid_validity(puzzle: np.ndarray) -> None:
 
     >>> check_grid_validity(np.array([]))
     Traceback (most recent call last):
-    Exception: The sudoku doesn't have the right shape
+    utils.SudokuError: The sudoku doesn't have the right shape
 
     >>> check_grid_validity(np.full(9, 1))
     Traceback (most recent call last):
-    Exception: The sudoku doesn't have the right shape
+    utils.SudokuError: The sudoku doesn't have the right shape
 
     >>> grid = np.full((9, 9), 0)
     >>> grid[0, 0] = -1
     >>> check_grid_validity(grid)
     Traceback (most recent call last):
-    Exception: Some cell have numbers that are out of range
+    utils.SudokuError: Some cell have numbers that are out of range
     """
     SUDOKU_SIZE = puzzle.shape[0]
     # Check to make sure that SUDOKU_SIZE is a square number
     if SUDOKU_SIZE != math.isqrt(SUDOKU_SIZE) ** 2:
         raise ValueError("SUDOKU_SIZE should be a square number")
 
-    # ! Raise Exception that are more appropriate
     if puzzle.shape != (SUDOKU_SIZE, SUDOKU_SIZE):
-        raise Exception("The sudoku doesn't have the right shape")
+        raise SudokuError("The sudoku doesn't have the right shape")
 
     for i in range(len(puzzle)):
         row = puzzle[i]
         if len(set(row)) + (row == 0).sum() != SUDOKU_SIZE + 1:
-            raise Exception(f"The same number appears twice in row {i}")
+            raise SudokuError(f"The same number appears twice in row {i}")
 
         column = puzzle[:, i]
         if len(set(column)) + (column == 0).sum() != SUDOKU_SIZE + 1:
-            raise Exception(f"The same number appears twice in column {i}")
+            raise SudokuError(f"The same number appears twice in column {i}")
 
         # ! Check for the same number in the same square
 
         for cell in row:
             if cell < 0 or cell > SUDOKU_SIZE:
-                raise Exception("Some cell have numbers that are out of range")
+                raise SudokuError("Some cell have numbers that are out of range")
 
 
 def candidates_to_bits(candidates: Set[int]) -> int:
@@ -136,3 +144,7 @@ def create_cell_candidates(puzzle: np.ndarray) -> np.ndarray:
                 cell_candidates[y][x] = bits
 
     return cell_candidates
+
+
+class SudokuError(Exception):
+    pass

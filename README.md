@@ -8,10 +8,10 @@ This repo originally started with a Codewars kata, then I just wanted to make th
 - Test cases written with [pytest](https://docs.pytest.org/en/stable/) (`pytest --doctest-modules` to run the tests)
 - [mypy](http://mypy-lang.org/) is used to type check the code. To type check the code, install mypy and data-science-types with `pip3 install mypy data-science-types` (data-science-types add type checking for numpy)
 - (Almost) pure functionnal programming
-- Can solve any size of sudoku (4x4, 9x9, 16x16, 25x25, etc)
+- Can solve any size of sudoku (1x1, 4x4, 9x9, 16x16, 25x25, etc)
 - Math, numpy and typing. That's it, no other dependencies to run the code!
 
-## Installation
+## Running the sudoku solver
 
 Make sure you have Python >= 3.8 installed
 
@@ -20,6 +20,12 @@ git clone https://github.com/kugiyasan/sudoku_solver
 cd sudoku_solver
 python3 test_cases.py
 ```
+
+`test_cases.py` contains some sudoku example and their solution
+
+`hard_sudoku_solver.py` contains the recursive function, the entrypoint functions and some class
+
+`utils.py` contains some simple functions needed in order to solve sudoku
 
 ## Usage
 

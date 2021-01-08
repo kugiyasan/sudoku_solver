@@ -1,4 +1,12 @@
+from typing import List
 from hard_sudoku_solver import sudoku_solver, generate_solutions
+
+
+def print_all_solutions(puzzle: List[List[int]]) -> None:
+    solutions = generate_solutions(puzzle)
+    for solution in solutions:
+        print(solution)
+
 
 if __name__ == "__main__":
     puzzle1 = [
@@ -87,18 +95,18 @@ if __name__ == "__main__":
         [0, 0, 1, G, 0, 0, 6, 0, 2, 0, 0, C, 0, B, 4, 0],
     ]
 
-    # solution = sudoku_solver(puzzle1)
-    solution = generate_solutions(puzzle4)
+    solution = sudoku_solver(puzzle1)
     # print(solution)
-    print(next(solution))
-    # print(next(solution))
 
-    # solution = sudoku_solver(puzzle2)
-    # print(solution)
-    # print(next(solution))
-    # print(next(solution))
+    print_all_solutions(puzzle2)
+    # print_all_solutions(puzzle3)
+    # print_all_solutions(puzzle4)
 
     # import timeit
 
-    # times = timeit.repeat(lambda: sudoku_solver(puzzle2), number=10)
+    # def stmt():
+    #     solution = generate_solutions(puzzle2)
+    #     next(solution)
+
+    # times = timeit.repeat(stmt, number=10)
     # print(times)

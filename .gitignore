@@ -2,7 +2,4 @@
 .pytest_cache/
 __pycache__/
 
-a.txt
-best_solution.py
-test.py
-3KyuSudoku.py
+tests/

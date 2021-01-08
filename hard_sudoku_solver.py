@@ -2,12 +2,13 @@
 # python3 -m pytest --doctest-modules
 
 import numpy as np
-from typing import Generator, List, Sequence, Tuple, Union
+from typing import Generator, List, Sequence, Tuple
 from utils import (
     bits_to_candidates,
     check_grid_validity,
     create_cell_candidates,
     get_row_column_square,
+    SudokuError,
 )
 
 
@@ -34,12 +35,12 @@ def get_cell_least_candidates(cell_candidates: np.ndarray) -> Tuple[int, int]:
     return coords
 
 
-def _remove_candidate(
-    cells: np.ndarray,
-    candidate: int,
-    SUDOKU_SIZE: int,
-) -> None:
-    """Remove the candidate from the cells in place"""
+def _remove_candidate(cells, candidate: int, SUDOKU_SIZE: int) -> None:
+    """
+    Remove the candidate from the cells in place
+
+    cells: an object supporting __len__ and __getitem__ (np.ndarray or np.flatiter)
+    """
     for i in range(len(cells)):
         if cells[i] == -1:
             continue
@@ -144,12 +145,14 @@ def sudoku_solver(puzzle: List[List[int]]) -> Sequence[int]:
 
     first_solution = next(solution_generator)
     if first_solution is None:
-        raise SolveError("No solution for this sudoku")
+        raise SudokuError("No solution for this sudoku")
+
+    first_solution = np.array(first_solution, copy=True)  # type: ignore
 
     # Raise an error if there is a second solution
     try:
         next(solution_generator)
-        raise SolveError("Multiple solutions for this sudoku")
+        raise SudokuError("Multiple solutions for this sudoku")
     except StopIteration:
         pass
 
@@ -159,6 +162,10 @@ def sudoku_solver(puzzle: List[List[int]]) -> Sequence[int]:
 def generate_solutions(
     original_puzzle: List[List[int]],
 ) -> Generator[np.ndarray, None, None]:
+    """
+    A more general entry point for the sudoku solver
+    Returns a generator with every solution
+    """
     puzzle = np.array(original_puzzle)
     check_grid_validity(puzzle)
 
@@ -166,7 +173,3 @@ def generate_solutions(
 
     # Solve recursively the puzzle
     return recursive_solve(puzzle, cell_candidates)
-
-
-class SolveError(Exception):
-    pass
